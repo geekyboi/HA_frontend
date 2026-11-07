@@ -95,21 +95,35 @@ export class BluetoothAdapterInfoPage extends LitElement {
 
   /**
    * Remote scanners (such as ESPHome Bluetooth proxies) are configured by the
-   * integration that provides them, so return that integration's config
-   * entry for the scanner's device.
+   * integration that provides them. The Bluetooth integration creates its own
+   * device for a remote scanner, linked through `via_device_id` to the device
+   * of the integration that provides it, so look there for that
+   * integration's config entry.
    */
   private _getSourceConfigEntry(
     device: DeviceRegistryEntry
   ): ConfigEntry | undefined {
-    if (
-      device.primary_config_entry &&
-      device.primary_config_entry in this._sourceConfigEntries
-    ) {
-      return this._sourceConfigEntries[device.primary_config_entry];
+    const sourceDevice = device.via_device_id
+      ? this.hass.devices[device.via_device_id]
+      : undefined;
+    for (const candidate of [device, sourceDevice]) {
+      if (!candidate) {
+        continue;
+      }
+      if (
+        candidate.primary_config_entry &&
+        candidate.primary_config_entry in this._sourceConfigEntries
+      ) {
+        return this._sourceConfigEntries[candidate.primary_config_entry];
+      }
+      const configEntry = candidate.config_entries
+        .map((id) => this._sourceConfigEntries[id])
+        .find((e) => e !== undefined);
+      if (configEntry) {
+        return configEntry;
+      }
     }
-    return device.config_entries
-      .map((id) => this._sourceConfigEntries[id])
-      .find((e) => e !== undefined);
+    return undefined;
   }
 
   private async _subscribeBluetoothConnectionAllocations(): Promise<void> {
